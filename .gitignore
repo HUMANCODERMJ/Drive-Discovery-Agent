@@ -1,0 +1,46 @@
+# -- Python --
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# -- Virtual environments --
+venv/
+.venv/
+env/
+ENV/
+.env.bak
+
+# -- Environment / secrets (CRITICAL) --
+.env
+*.env
+service-account.json
+service_account.json
+*-sa-key.json
+credentials.json
+google_sa_*.json
+
+# -- IDE --
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# -- Logs --
+*.log
+logs/
+
+# -- OS --
+.DS_Store
+desktop.ini
+
+# -- Render / deploy artifacts --
+.render/

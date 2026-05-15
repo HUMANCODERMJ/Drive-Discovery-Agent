@@ -2,8 +2,10 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
+from agent.graph import agent_graph
 from config import get_settings
 from services.llm_factory import get_llm
 
@@ -66,10 +68,31 @@ async def health() -> dict[str, str]:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    """Return a placeholder chat response until agent wiring is implemented."""
+    """Invoke the LangGraph skeleton and return its generated response."""
 
-    _ = request
+    settings = get_settings()
+    user_content = ""
+    for msg in request.messages:
+        if msg.get("role") == "user":
+            user_content = msg.get("content", "")
+
+    initial_state: dict = {
+        "messages": [HumanMessage(content=user_content)],
+        "search_results": [],
+        "query_string": "",
+        "active_llm": settings.active_llm,
+        "error": "",
+    }
+
+    result = agent_graph.invoke(initial_state)
+
+    reply = ""
+    for msg in reversed(result["messages"]):
+        if hasattr(msg, "content") and msg.__class__.__name__ == "AIMessage":
+            reply = msg.content
+            break
+
     return ChatResponse(
-        reply="Agent not yet connected. Step 1 complete.",
-        sources=[],
+        reply=reply,
+        sources=result.get("search_results", []),
     )
