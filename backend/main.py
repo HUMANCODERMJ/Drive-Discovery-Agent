@@ -10,11 +10,18 @@ from config import get_settings
 from services.llm_factory import get_llm
 
 
+class MessageItem(BaseModel):
+    """Single chat message item."""
+
+    role: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     """Incoming chat payload for a client session."""
 
-    messages: list[dict] = Field(default_factory=list)
-    session_id: str
+    messages: list[MessageItem]
+    session_id: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -72,9 +79,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     settings = get_settings()
     user_content = ""
-    for msg in request.messages:
-        if msg.get("role") == "user":
-            user_content = msg.get("content", "")
+    user_messages = [message for message in request.messages if message.role == "user"]
+    if user_messages:
+        user_content = user_messages[-1].content
 
     initial_state: dict = {
         "messages": [HumanMessage(content=user_content)],
