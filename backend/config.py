@@ -25,3 +25,27 @@ def get_settings() -> Settings:
     """Return a cached settings instance so config is parsed once."""
 
     return Settings()
+
+
+PLACEHOLDER_PATTERNS = [
+    "your_",
+    "placeholder",
+    "changeme",
+    "xxxx",
+    "example",
+    "",
+]
+
+
+def is_placeholder(value: str) -> bool:
+    """Return True if a config value looks like it was never filled in."""
+
+    v = value.strip().lower()
+    for pattern in PLACEHOLDER_PATTERNS:
+        if pattern == "":
+            if v == "":
+                return True
+            continue
+        if v.startswith(pattern) or v == pattern:
+            return True
+    return False

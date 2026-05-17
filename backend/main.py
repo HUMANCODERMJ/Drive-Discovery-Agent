@@ -1,13 +1,16 @@
 """FastAPI entrypoint for the Drive Discovery Agent backend."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
+import httpx
 from pydantic import BaseModel, Field
 
 from agent.graph import agent_graph
-from config import get_settings
-from services.llm_factory import get_llm
+from config import get_settings, is_placeholder
+from services.llm_factory import validate_llm
 
 
 class MessageItem(BaseModel):
@@ -31,7 +34,50 @@ class ChatResponse(BaseModel):
     sources: list = Field(default_factory=list)
 
 
-app = FastAPI(title="Drive Discovery Agent API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(fastapi_app: FastAPI):
+    """Application lifespan for startup validation and shutdown logging."""
+
+    _ = fastapi_app
+    settings = get_settings()
+    print(f"[startup] active LLM: {settings.active_llm}")
+
+    if settings.active_llm == "gemini" and is_placeholder(settings.gemini_api_key):
+        print(
+            "[startup] WARNING: GEMINI_API_KEY looks like a placeholder. "
+            "Set a real key in .env or switch ACTIVE_LLM=ollama."
+        )
+        try:
+            base = settings.ollama_base_url.rstrip("/")
+            resp = httpx.get(f"{base}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                print("[startup] Ollama is reachable, but ACTIVE_LLM is still gemini.")
+            else:
+                print(
+                    f"[startup] WARNING: Ollama is not reachable (status {resp.status_code}). "
+                    "Server will start, but /chat will fail until Gemini is configured or Ollama is reachable."
+                )
+        except httpx.HTTPError as exc:  # pragma: no cover - network probe warning path
+            print(
+                f"[startup] WARNING: Ollama is not reachable: {exc}. "
+                "Server will start, but /chat will fail until Gemini is configured or Ollama is reachable."
+            )
+    else:
+        ok, reason = validate_llm(settings)
+        if ok:
+            print(f"[startup] LLM '{settings.active_llm}' validated OK")
+        else:
+            print(f"[startup] WARNING: LLM '{settings.active_llm}' validation FAILED: {reason}")
+            print(
+                "[startup] Server will still start, but /chat will fail until the LLM issue is resolved."
+            )
+
+    yield
+
+    print("[shutdown] Drive Discovery Agent shutting down.")
+
+
+app = FastAPI(title="Drive Discovery Agent API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,19 +91,6 @@ def _mask_folder_id(folder_id: str) -> str:
     """Return a redacted Drive folder id to avoid exposing full value."""
 
     return f"{folder_id[:8]}..."
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Warm up app configuration and attempt to initialize the active LLM."""
-
-    settings = get_settings()
-    print(f"[startup] active LLM: {settings.active_llm}")
-    try:
-        get_llm(settings)
-        print("[startup] LLM loaded OK")
-    except Exception as exc:  # pylint: disable=broad-exception-caught  # pragma: no cover
-        print(f"[startup] warning: failed to load LLM: {exc}")
 
 
 @app.get("/health")
